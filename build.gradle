@@ -1,0 +1,63 @@
+buildscript {
+    apply from: 'versions.gradle'
+}
+
+plugins {
+    id 'java'
+    id 'application'
+    id 'com.bmuschko.docker-remote-api' version '5.3.0'
+}
+
+import com.bmuschko.gradle.docker.tasks.image.DockerBuildImage
+
+group 'dev.astamur'
+version '0.0.1'
+
+sourceCompatibility = 1.11
+targetCompatibility = 1.11
+
+mainClassName = 'dev.astamur.trading.App'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Core
+    implementation "io.netty:netty-all:$versions.netty"
+    implementation "com.fasterxml.jackson.core:jackson-databind:$versions.jackson"
+    implementation "org.asynchttpclient:async-http-client:$versions.asynchttpclient"
+    implementation "com.typesafe:config:$versions.config"
+
+    compileOnly "org.projectlombok:lombok:$versions.lombok"
+    annotationProcessor "org.projectlombok:lombok:$versions.lombok"
+
+    // Logging
+    implementation "org.slf4j:slf4j-api:$versions.slf4j"
+    implementation "ch.qos.logback:logback-classic:$versions.logback"
+
+    // Tests
+    testImplementation "org.junit.jupiter:junit-jupiter-api:$versions.junit"
+    testImplementation "org.testcontainers:junit-jupiter:$versions.testcontainers"
+    testImplementation "org.assertj:assertj-core:$versions.assertj"
+    testRuntime "org.junit.jupiter:junit-jupiter-engine:$versions.junit"
+}
+
+test {
+    useJUnitPlatform()
+}
+
+jar {
+    manifest {
+        attributes 'Main-Class': mainClassName
+    }
+
+    from {
+        configurations.compileClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+}
+
+task buildDockerImage(type: DockerBuildImage) {
+    inputDir.set(file('./'))
+    tags.add("astamur/trading-bot:$version")
+}
