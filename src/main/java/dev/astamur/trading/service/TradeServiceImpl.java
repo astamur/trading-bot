@@ -5,12 +5,14 @@ import dev.astamur.trading.model.OrderResponse;
 import dev.astamur.trading.model.Quote;
 import dev.astamur.trading.model.Trade;
 import lombok.extern.slf4j.Slf4j;
+import org.asynchttpclient.AsyncCompletionHandler;
 import org.asynchttpclient.AsyncHttpClient;
-import org.asynchttpclient.ListenableFuture;
 import org.asynchttpclient.Response;
 
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
@@ -44,91 +46,116 @@ public class TradeServiceImpl implements TradeService {
     }
 
     @Override
-    public void process(Quote quote, Consumer<String> unsubscribe) {
+    public Future<OrderResponse> process(Quote quote, Consumer<String> unsubscribe) {
         Trade trade = trades.get(quote.getBody().getSecurityId());
+
+        if (trade == null) {
+            return CompletableFuture.completedFuture(null);
+        }
+
         AtomicInteger state = states.get(trade.getProductId());
 
-        int curState = state.get();
-
         // No actions while in interstate
-        if (curState == BUY_SENT || curState == SELL_SENT || curState == SOLD) {
-            return;
+        if (state.get() == BUY_SENT || state.get() == SELL_SENT || state.get() == SOLD) {
+            return CompletableFuture.completedFuture(null);
         }
 
         // Check buy first
         if (isBuy(quote, trade) && state.compareAndSet(NEW, BUY_SENT)) {
-            buy(trade);
-            return;
+            return buy(trade);
         }
 
         // Check sell first
         if (isSell(quote, trade) && state.compareAndSet(BOUGHT, SELL_SENT)) {
-            sell(trade, unsubscribe);
+            return sell(trade, unsubscribe);
         }
+
+        return CompletableFuture.completedFuture(null);
     }
 
-    private void buy(Trade trade) {
-        ListenableFuture<Response> responseFuture = httpClient.executeRequest(
-                prepareBuyRequest(config, Trade.builder()
-                        .productId(trade.getProductId())
-                        .amount(trade.getAmount())
-                        .leverage(trade.getLeverage())
-                        .build()));
+    Future<OrderResponse> buy(Trade trade) {
+        try {
+            return httpClient.executeRequest(
+                    prepareBuyRequest(config, Trade.builder()
+                            .productId(trade.getProductId())
+                            .amount(trade.getAmount())
+                            .leverage(trade.getLeverage())
+                            .build()), new AsyncCompletionHandler<>() {
+                        @Override
+                        public OrderResponse onCompleted(Response response) {
+                            if (response.getStatusCode() == 200) {
+                                OrderResponse orderResponse = getObject(response.getResponseBody(), OrderResponse.class);
 
-        responseFuture.addListener(() -> {
-            try {
-                Response response = responseFuture.get();
+                                orders.putIfAbsent(trade.getProductId(), orderResponse);
+                                states.get(trade.getProductId()).compareAndSet(BUY_SENT, BOUGHT);
 
-                if (response.getStatusCode() == 200) {
-                    OrderResponse orderResponse = getObject(response.getResponseBody(), OrderResponse.class);
+                                log.info("BUY SUCCESS. Response: {}", orderResponse);
 
-                    orders.putIfAbsent(trade.getProductId(), orderResponse);
-                    states.get(trade.getProductId()).compareAndSet(BUY_SENT, BOUGHT);
+                                return orderResponse;
+                            } else {
+                                log.error("BUY FAILED. Response: {}. Product: {}", response.toString(), trade.getProductId());
+                                states.get(trade.getProductId()).compareAndSet(BUY_SENT, NEW);
+                            }
+                            return null;
+                        }
 
-                    log.info("BUY SUCCESS. Response: {}", orderResponse);
-                } else {
-                    log.error("BUY FAILED. Response: {}. Product: {}", response.toString(), trade.getProductId());
-                    states.get(trade.getProductId()).compareAndSet(BUY_SENT, NEW);
-                }
-            } catch (Throwable t) {
-                log.error("Exception occurred while executing buy request", t);
-                states.get(trade.getProductId()).compareAndSet(BUY_SENT, NEW);
-            }
-        }, null);
+                        @Override
+                        public void onThrowable(Throwable t) {
+                            log.error("Exception occurred while executing buy request", t);
+                            states.get(trade.getProductId()).compareAndSet(BUY_SENT, NEW);
+                        }
+                    });
+        } catch (Throwable t) {
+            log.error("Exception occurred while executing buy request", t);
+            states.get(trade.getProductId()).compareAndSet(BUY_SENT, NEW);
+        }
+
+        return CompletableFuture.completedFuture(null);
     }
 
-    private void sell(Trade trade, Consumer<String> unsubscribe) {
-        OrderResponse order = orders.get(trade.getProductId());
+    Future<OrderResponse> sell(Trade trade, Consumer<String> unsubscribe) {
+        try {
+            OrderResponse order = orders.get(trade.getProductId());
 
-        ListenableFuture<Response> responseFuture = httpClient.executeRequest(
-                prepareSellRequest(config, order.getPositionId()));
+            return httpClient.executeRequest(
+                    prepareSellRequest(config, order.getPositionId()), new AsyncCompletionHandler<>() {
+                        @Override
+                        public OrderResponse onCompleted(Response response) {
+                            if (response.getStatusCode() == 200) {
+                                OrderResponse orderResponse = getObject(response.getResponseBody(), OrderResponse.class);
 
-        responseFuture.addListener(() -> {
-            try {
-                Response response = responseFuture.get();
+                                orders.put(trade.getProductId(), orderResponse);
+                                states.get(trade.getProductId()).compareAndSet(SELL_SENT, SOLD);
 
-                if (response.getStatusCode() == 200) {
-                    OrderResponse orderResponse = getObject(response.getResponseBody(), OrderResponse.class);
+                                log.info("SELL SUCCESS. Response: {}", orderResponse);
 
-                    orders.put(trade.getProductId(), orderResponse);
-                    states.get(trade.getProductId()).compareAndSet(SELL_SENT, SOLD);
+                                try {
+                                    unsubscribe.accept(trade.getProductId());
+                                } catch (Throwable t) {
+                                    log.error(String.format("Can not unsubscribe from '%s'", trade.getProductId()), t);
+                                }
 
-                    log.info("SELL SUCCESS. Response: {}", orderResponse);
+                                return orderResponse;
+                            } else {
+                                log.error("SELL FAILED. Response: {}. Order: {}", response.toString(), order);
+                                states.get(trade.getProductId()).compareAndSet(SELL_SENT, BOUGHT);
+                            }
 
-                    try {
-                        unsubscribe.accept(trade.getProductId());
-                    } catch (Throwable t) {
-                        log.error(String.format("Can not unsubscribe from '%s'", trade.getProductId()), t);
-                    }
-                } else {
-                    log.error("SELL FAILED. Response: {}. Order: {}", response.toString(), order);
-                    states.get(trade.getProductId()).compareAndSet(SELL_SENT, BOUGHT);
-                }
-            } catch (Throwable t) {
-                log.error("Exception occurred while executing sell request", t);
-                states.get(trade.getProductId()).compareAndSet(SELL_SENT, BOUGHT);
-            }
-        }, null);
+                            return null;
+                        }
+
+                        @Override
+                        public void onThrowable(Throwable t) {
+                            log.error(String.format("SELL FAILED. Order: %s", order), t);
+                            states.get(trade.getProductId()).compareAndSet(SELL_SENT, BOUGHT);
+                        }
+                    });
+        } catch (Throwable t) {
+            log.error("Exception occurred while executing sell request", t);
+            states.get(trade.getProductId()).compareAndSet(SELL_SENT, BOUGHT);
+        }
+
+        return CompletableFuture.completedFuture(null);
     }
 
     private boolean isBuy(Quote quote, Trade trade) {

@@ -37,9 +37,15 @@ dependencies {
     implementation "ch.qos.logback:logback-classic:$versions.logback"
 
     // Tests
+    testImplementation "ch.qos.logback:logback-classic:$versions.logback"
     testImplementation "org.junit.jupiter:junit-jupiter-api:$versions.junit"
     testImplementation "org.testcontainers:junit-jupiter:$versions.testcontainers"
+    testImplementation "org.eclipse.jetty:jetty-server:$versions.jetty"
+    testImplementation "org.eclipse.jetty:jetty-security:$versions.jetty"
+    testImplementation "commons-io:commons-io:$versions.commons_io"
+    testImplementation "org.asynchttpclient:async-http-client:${versions.asynchttpclient}:tests"
     testImplementation "org.assertj:assertj-core:$versions.assertj"
+    testImplementation "org.mockito:mockito-core:$versions.mockito"
     testRuntime "org.junit.jupiter:junit-jupiter-engine:$versions.junit"
 }
 

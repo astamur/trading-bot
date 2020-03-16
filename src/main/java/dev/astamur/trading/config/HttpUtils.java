@@ -59,6 +59,14 @@ public class HttpUtils {
         }
     }
 
+    public static String getString(Object value) {
+        try {
+            return mapper.writeValueAsString(value);
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("Can't serialize json value to string", e);
+        }
+    }
+
     public static Request prepareBuyRequest(AppConfig config, Trade trade) {
         byte[] buyOrder = getBytes(OrderRequest.builder()
                 .productId(trade.getProductId())
