@@ -13,5 +13,10 @@ import lombok.NoArgsConstructor;
 public class Quote {
     @JsonProperty("t")
     QuoteType type;
+
+    @JsonProperty("v")
+    Integer version;
+
+    String id;
     QuoteBody body;
 }

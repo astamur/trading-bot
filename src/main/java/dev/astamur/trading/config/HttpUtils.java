@@ -11,6 +11,7 @@ import org.asynchttpclient.RequestBuilder;
 import org.asynchttpclient.uri.Uri;
 
 import java.net.URI;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -103,6 +104,14 @@ public class HttpUtils {
     public static SubscriptionRequest subscribeTo(List<String> productIds) {
         return SubscriptionRequest.builder()
                 .subscribeTo(toListIds(productIds))
+                .unsubscribeFrom(Collections.emptyList())
+                .build();
+    }
+
+    public static SubscriptionRequest unsubscribeFrom(List<String> productIds) {
+        return SubscriptionRequest.builder()
+                .subscribeTo(Collections.emptyList())
+                .unsubscribeFrom(toListIds(productIds))
                 .build();
     }
 
@@ -113,12 +122,6 @@ public class HttpUtils {
         return uri.getPort() == -1
                 ? "http".equals(uri.getScheme()) ? 80 : 443
                 : uri.getPort();
-    }
-
-    public static SubscriptionRequest unsubscribeFrom(List<String> productIds) {
-        return SubscriptionRequest.builder()
-                .unsubscribeFrom(toListIds(productIds))
-                .build();
     }
 
     private static List<String> toListIds(List<String> productIds) {

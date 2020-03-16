@@ -9,6 +9,7 @@ import io.netty.channel.Channel;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.handler.codec.http.websocketx.CloseWebSocketFrame;
 import lombok.extern.slf4j.Slf4j;
 import org.asynchttpclient.AsyncHttpClient;
 
@@ -19,6 +20,8 @@ import static org.asynchttpclient.Dsl.asyncHttpClient;
 
 @Slf4j
 public class App {
+    private Channel subscriptionChannel;
+
     public static void main(String[] args) {
         AppConfig config = new AppConfig();
         AsyncHttpClient httpClient = asyncHttpClient();
@@ -39,7 +42,7 @@ public class App {
                     .channel(NioSocketChannel.class)
                     .handler(new SubscriptionClientInitializer(config, subscriptionHandler));
 
-            Channel subscriptionChannel = bootstrap
+            subscriptionChannel = bootstrap
                     .connect(config.getSubscriptionUri().getHost(), getPort(config.getSubscriptionUri()))
                     .sync()
                     .channel();
@@ -54,6 +57,12 @@ public class App {
                 log.error("Error occurred while closing http client");
             }
             group.shutdownGracefully();
+        }
+    }
+
+    public void close() {
+        if (subscriptionChannel != null) {
+            subscriptionChannel.writeAndFlush(new CloseWebSocketFrame());
         }
     }
 }

@@ -8,6 +8,7 @@ import lombok.*;
 @AllArgsConstructor
 public class QuoteBody {
     String securityId;
+    String type;
     String developerMessage;
     String errorCode;
     Long timeStamp;

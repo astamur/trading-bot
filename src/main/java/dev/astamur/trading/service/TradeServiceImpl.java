@@ -60,12 +60,12 @@ public class TradeServiceImpl implements TradeService {
             return CompletableFuture.completedFuture(null);
         }
 
-        // Check buy first
+        // Try to buy first
         if (isBuy(quote, trade) && state.compareAndSet(NEW, BUY_SENT)) {
             return buy(trade);
         }
 
-        // Check sell first
+        // Now try to sell
         if (isSell(quote, trade) && state.compareAndSet(BOUGHT, SELL_SENT)) {
             return sell(trade, unsubscribe);
         }

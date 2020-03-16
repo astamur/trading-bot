@@ -3,7 +3,6 @@ package dev.astamur.trading.client;
 import dev.astamur.trading.config.AppConfig;
 import dev.astamur.trading.model.Quote;
 import dev.astamur.trading.model.QuoteType;
-import dev.astamur.trading.model.SubscriptionRequest;
 import dev.astamur.trading.model.Trade;
 import dev.astamur.trading.service.TradeService;
 import io.netty.buffer.Unpooled;
@@ -87,20 +86,26 @@ public class SubscriptionClientHandler extends SimpleChannelInboundHandler<Objec
                             ", content=" + response.content().toString(CharsetUtil.UTF_8) + ')');
         }
 
-        WebSocketFrame frame = (WebSocketFrame) msg;
         try {
+            WebSocketFrame frame = (WebSocketFrame) msg;
+
             if (frame instanceof TextWebSocketFrame) {
                 TextWebSocketFrame textFrame = (TextWebSocketFrame) frame;
                 Quote quote = getObject(textFrame.text(), Quote.class);
 
+                if (quote.getType() != null) {
+                    log.info("{}: {}", quote.getType().name(), quote);
+                }
+
                 if (QuoteType.QUOTE == quote.getType()) {
-                    log.info("QUOTE: " + quote);
                     tradeService.process(quote, productId -> ctx.writeAndFlush(new BinaryWebSocketFrame(
                             Unpooled.wrappedBuffer(getBytes(unsubscribeFrom(List.of(productId)))))));
                 }
             } else if (frame instanceof CloseWebSocketFrame) {
                 log.info("Closing subscription client");
                 ch.close();
+            } else {
+                log.warn("Don't know how to process this: {}", msg);
             }
         } catch (Throwable t) {
             log.error("Can't process quotes response", t);

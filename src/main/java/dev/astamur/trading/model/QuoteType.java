@@ -7,6 +7,7 @@ public enum QuoteType {
     FAILED("connect.failed"),
     PERFORMANCE("portfolio.performance"),
     PROMOTION_BANNER("incentives.promotion.banner"),
+    CLOSED("portfolio.position.closed"),
     QUOTE("trading.quote");
 
     private String typeName;
