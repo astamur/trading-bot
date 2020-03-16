@@ -21,12 +21,14 @@ Build a project with gradle:
 
 Put your trades into config (local or dev environment):
 ```
-{PROJECT_DIR}/docker/application_dev.conf
+PROJECT_DIR/docker/application_dev.conf
 ```
 
 
 Start and see logs docker-compose from `{PROJECT_DIR}/docker` directory ((local or dev environment)):
 ```
+cd PROJECT_DIR/docker
 docker-compose -f docker-compose_dev.yml up -d
 docker-compose -f docker-compose_dev.yml logs -f app
+docker-compose -f docker-compose_dev.yml down
 ```
